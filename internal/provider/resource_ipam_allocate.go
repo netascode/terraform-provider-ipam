@@ -96,7 +96,7 @@ func (r resourceAllocate) Create(ctx context.Context, req tfsdk.CreateResourceRe
 		prefixLength := types.String{Value: r.provider.addresses[index].prefixLength}
 		gateway := types.String{Value: r.provider.addresses[index].gateway}
 		addresses[id] = AllocateAddress{Ip: ip, PrefixLength: prefixLength, Gateway: gateway}
-		tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip))
+		tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip.Value))
 		index += 1
 	}
 
@@ -140,6 +140,8 @@ func (r resourceAllocate) Update(ctx context.Context, req tfsdk.UpdateResourceRe
 
 	addresses := make(map[string]AllocateAddress)
 
+	var newAddresses []string
+
 	for id, address := range plan.Addresses {
 		// check if an address is already assigned
 		if address.Ip.Value != "" {
@@ -149,8 +151,16 @@ func (r resourceAllocate) Update(ctx context.Context, req tfsdk.UpdateResourceRe
 		// find next free ip
 		for _, a := range r.provider.addresses {
 			inUse := false
+			// verify state if already in use
 			for _, inUseAddr := range plan.Addresses {
 				if a.ip == inUseAddr.Ip.Value {
+					inUse = true
+					break
+				}
+			}
+			// verify if assigned during this operation
+			for _, inUseAddr := range newAddresses {
+				if a.ip == inUseAddr {
 					inUse = true
 					break
 				}
@@ -162,8 +172,9 @@ func (r resourceAllocate) Update(ctx context.Context, req tfsdk.UpdateResourceRe
 			prefixLength := types.String{Value: a.prefixLength}
 			gateway := types.String{Value: a.gateway}
 			addresses[id] = AllocateAddress{Ip: ip, PrefixLength: prefixLength, Gateway: gateway}
-			tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip))
-			continue
+			tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip.Value))
+			newAddresses = append(newAddresses, ip.Value)
+			break
 		}
 	}
 
