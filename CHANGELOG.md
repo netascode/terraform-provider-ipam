@@ -1,4 +1,4 @@
-## 0.0.2 (unreleased)
+## 0.0.2
 
 - Fix assignment of multiple ÍPs
 
