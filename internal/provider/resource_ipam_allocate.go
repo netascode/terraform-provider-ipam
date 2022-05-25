@@ -202,7 +202,3 @@ func (r resourceAllocate) Delete(ctx context.Context, req tfsdk.DeleteResourceRe
 
 	resp.State.RemoveResource(ctx)
 }
-
-func (r resourceAllocate) ImportState(ctx context.Context, req tfsdk.ImportResourceStateRequest, resp *tfsdk.ImportResourceStateResponse) {
-	tfsdk.ResourceImportStateNotImplemented(ctx, "Import not supported.", resp)
-}

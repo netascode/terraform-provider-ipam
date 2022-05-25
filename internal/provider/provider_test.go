@@ -3,7 +3,7 @@ package provider
 import (
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 )
 
@@ -26,7 +26,7 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 		addresses = append(addresses, providerAddress{"10.1.1.9", "24", "10.1.1.254"})
 		addresses = append(addresses, providerAddress{"10.1.1.10", "24", "10.1.1.254"})
 		provider.addresses = addresses
-		return tfsdk.NewProtocol6Server(provider), nil
+		return providerserver.NewProtocol6WithError(provider)()
 	},
 }
 
