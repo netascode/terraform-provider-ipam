@@ -5,21 +5,41 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
+	"math/rand"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-type resourceAllocateType struct{}
+var _ resource.Resource = (*ipamAllocateResource)(nil)
 
-func (t resourceAllocateType) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
+func NewIpamAllocateResource() resource.Resource {
+	return &ipamAllocateResource{}
+}
+
+type ipamAllocateResource struct{
+	addresses []providerAddress
+}
+
+func (r *ipamAllocateResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_allocate"
+}
+
+func (r *ipamAllocateResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
 	return tfsdk.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Allocate one IP per ID.",
 
 		Attributes: map[string]tfsdk.Attribute{
+			"id": {
+				Description: "Random internal ID.",
+				Type:        types.StringType,
+				Computed:    true,
+			},
 			"addresses": {
 				MarkdownDescription: "A list of IDs and its addresses.",
 				Required:            true,
@@ -29,7 +49,7 @@ func (t resourceAllocateType) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 						Type:                types.StringType,
 						Computed:            true,
 						PlanModifiers: tfsdk.AttributePlanModifiers{
-							tfsdk.UseStateForUnknown(),
+							resource.UseStateForUnknown(),
 						},
 					},
 					"prefix_length": {
@@ -37,7 +57,7 @@ func (t resourceAllocateType) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 						Type:                types.StringType,
 						Computed:            true,
 						PlanModifiers: tfsdk.AttributePlanModifiers{
-							tfsdk.UseStateForUnknown(),
+							resource.UseStateForUnknown(),
 						},
 					},
 					"gateway": {
@@ -45,16 +65,17 @@ func (t resourceAllocateType) GetSchema(ctx context.Context) (tfsdk.Schema, diag
 						Type:                types.StringType,
 						Computed:            true,
 						PlanModifiers: tfsdk.AttributePlanModifiers{
-							tfsdk.UseStateForUnknown(),
+							resource.UseStateForUnknown(),
 						},
 					},
-				}, tfsdk.MapNestedAttributesOptions{}),
+				}),
 			},
 		},
 	}, nil
 }
 
 type Allocate struct {
+	Id types.String `tfsdk:"id"`
 	Addresses map[string]AllocateAddress `tfsdk:"addresses"`
 }
 
@@ -64,19 +85,15 @@ type AllocateAddress struct {
 	Gateway types.String `tfsdk:"gateway"`
 }
 
-func (t resourceAllocateType) NewResource(ctx context.Context, in tfsdk.Provider) (tfsdk.Resource, diag.Diagnostics) {
-	provider, diags := convertProviderType(in)
+func (r *ipamAllocateResource) Configure(ctx context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
 
-	return resourceAllocate{
-		provider: provider,
-	}, diags
+	r.addresses = req.ProviderData.([]providerAddress)
 }
 
-type resourceAllocate struct {
-	provider provider
-}
-
-func (r resourceAllocate) Create(ctx context.Context, req tfsdk.CreateResourceRequest, resp *tfsdk.CreateResourceResponse) {
+func (r *ipamAllocateResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan, state Allocate
 
 	// Read plan
@@ -92,15 +109,18 @@ func (r resourceAllocate) Create(ctx context.Context, req tfsdk.CreateResourceRe
 
 	index := 0
 	for id := range plan.Addresses {
-		ip := types.String{Value: r.provider.addresses[index].ip}
-		prefixLength := types.String{Value: r.provider.addresses[index].prefixLength}
-		gateway := types.String{Value: r.provider.addresses[index].gateway}
+		ip := types.StringValue(r.addresses[index].ip)
+		prefixLength := types.StringValue(r.addresses[index].prefixLength)
+		gateway := types.StringValue(r.addresses[index].gateway)
 		addresses[id] = AllocateAddress{Ip: ip, PrefixLength: prefixLength, Gateway: gateway}
-		tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip.Value))
+		tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip.ValueString()))
 		index += 1
 	}
 
 	state.Addresses = addresses
+
+	rand.Seed(time.Now().UnixNano())
+	state.Id = types.StringValue(fmt.Sprint(rand.Int63()))
 
 	tflog.Debug(ctx, fmt.Sprintf("Create finished successfully"))
 
@@ -108,7 +128,7 @@ func (r resourceAllocate) Create(ctx context.Context, req tfsdk.CreateResourceRe
 	resp.Diagnostics.Append(diags...)
 }
 
-func (r resourceAllocate) Read(ctx context.Context, req tfsdk.ReadResourceRequest, resp *tfsdk.ReadResourceResponse) {
+func (r *ipamAllocateResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state Allocate
 
 	// Read state
@@ -126,7 +146,7 @@ func (r resourceAllocate) Read(ctx context.Context, req tfsdk.ReadResourceReques
 	resp.Diagnostics.Append(diags...)
 }
 
-func (r resourceAllocate) Update(ctx context.Context, req tfsdk.UpdateResourceRequest, resp *tfsdk.UpdateResourceResponse) {
+func (r *ipamAllocateResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, state Allocate
 
 	// Read plan
@@ -144,16 +164,16 @@ func (r resourceAllocate) Update(ctx context.Context, req tfsdk.UpdateResourceRe
 
 	for id, address := range plan.Addresses {
 		// check if an address is already assigned
-		if address.Ip.Value != "" {
+		if address.Ip.ValueString() != "" {
 			addresses[id] = address
 			continue
 		}
 		// find next free ip
-		for _, a := range r.provider.addresses {
+		for _, a := range r.addresses {
 			inUse := false
 			// verify state if already in use
 			for _, inUseAddr := range plan.Addresses {
-				if a.ip == inUseAddr.Ip.Value {
+				if a.ip == inUseAddr.Ip.ValueString() {
 					inUse = true
 					break
 				}
@@ -168,12 +188,12 @@ func (r resourceAllocate) Update(ctx context.Context, req tfsdk.UpdateResourceRe
 			if inUse {
 				continue
 			}
-			ip := types.String{Value: a.ip}
-			prefixLength := types.String{Value: a.prefixLength}
-			gateway := types.String{Value: a.gateway}
+			ip := types.StringValue(a.ip)
+			prefixLength := types.StringValue(a.prefixLength)
+			gateway := types.StringValue(a.gateway)
 			addresses[id] = AllocateAddress{Ip: ip, PrefixLength: prefixLength, Gateway: gateway}
-			tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip.Value))
-			newAddresses = append(newAddresses, ip.Value)
+			tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", id, ip.ValueString()))
+			newAddresses = append(newAddresses, ip.ValueString())
 			break
 		}
 	}
@@ -186,7 +206,7 @@ func (r resourceAllocate) Update(ctx context.Context, req tfsdk.UpdateResourceRe
 	resp.Diagnostics.Append(diags...)
 }
 
-func (r resourceAllocate) Delete(ctx context.Context, req tfsdk.DeleteResourceRequest, resp *tfsdk.DeleteResourceResponse) {
+func (r *ipamAllocateResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state Allocate
 
 	// Read state
