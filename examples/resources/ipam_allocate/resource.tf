@@ -1,6 +1,23 @@
 resource "ipam_allocate" "example" {
-  addresses = {
-    "host1" = {}
-    "host2" = {}
-  }
+  pool  = "POOL1"
+  hosts = ["host1", "host2"]
 }
+
+output "addresses" {
+  value = ipam_allocate.example.addresses
+}
+
+/* 
+addresses = tomap({
+  "host1" = {
+    "gateway" = "1.1.1.254"
+    "ip" = "1.1.1.1"
+    "prefix_length" = 24
+  }
+  "host2" = {
+    "gateway" = "1.1.1.254"
+    "ip" = "1.1.1.2"
+    "prefix_length" = 24
+  }
+})
+*/
