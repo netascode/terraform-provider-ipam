@@ -1,6 +1,6 @@
 ## 0.1.0 (unreleased)
 
-- Add support for multiple pools
+- BREAKING CHANGE: Add support for multiple pools
 - Add support for IP ranges
 - Improve provider configuration validation
 
