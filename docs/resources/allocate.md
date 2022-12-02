@@ -14,16 +14,19 @@ Allocate one IP from a pool per unique host ID. A single resource must be used p
 
 ```terraform
 resource "ipam_allocate" "example" {
-  pool  = "POOL1"
-  hosts = ["host1", "host2"]
+  pool = "POOL1"
+  hosts = {
+    "host1" = {}
+    "host2" = {}
+  }
 }
 
-output "addresses" {
-  value = ipam_allocate.example.addresses
+output "hosts" {
+  value = ipam_allocate.example.hosts
 }
 
 /* 
-addresses = tomap({
+hosts = tomap({
   "host1" = {
     "gateway" = "1.1.1.254"
     "ip" = "1.1.1.1"
@@ -43,16 +46,15 @@ addresses = tomap({
 
 ### Required
 
-- `hosts` (List of String) List of unique host IDs.
+- `hosts` (Attributes Map) A map of host IDs and its assigned addresses. (see [below for nested schema](#nestedatt--hosts))
 - `pool` (String) Pool name.
 
 ### Read-Only
 
-- `addresses` (Attributes Map) A map of host IDs and its assigned addresses. (see [below for nested schema](#nestedatt--addresses))
 - `id` (String) Random internal ID.
 
-<a id="nestedatt--addresses"></a>
-### Nested Schema for `addresses`
+<a id="nestedatt--hosts"></a>
+### Nested Schema for `hosts`
 
 Read-Only:
 

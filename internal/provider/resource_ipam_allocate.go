@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -45,13 +44,8 @@ func (r *ipamAllocateResource) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 				Required:    true,
 			},
 			"hosts": {
-				Description: "List of unique host IDs.",
-				Type:        types.ListType{ElemType: types.StringType},
+				Description: "A map of host IDs and its assigned addresses.",
 				Required:    true,
-			},
-			"addresses": {
-				MarkdownDescription: "A map of host IDs and its assigned addresses.",
-				Computed:            true,
 				Attributes: tfsdk.MapNestedAttributes(map[string]tfsdk.Attribute{
 					"ip": {
 						MarkdownDescription: "IP address.",
@@ -84,13 +78,16 @@ func (r *ipamAllocateResource) GetSchema(ctx context.Context) (tfsdk.Schema, dia
 }
 
 type Allocate struct {
-	Id        types.String `tfsdk:"id"`
-	Pool      types.String `tfsdk:"pool"`
-	Hosts     types.List   `tfsdk:"hosts"`
-	Addresses types.Map    `tfsdk:"addresses"`
+	Id    types.String            `tfsdk:"id"`
+	Pool  types.String            `tfsdk:"pool"`
+	Hosts map[string]AllocateHost `tfsdk:"hosts"`
 }
 
-var AddressType = map[string]attr.Type{"gateway": types.StringType, "ip": types.StringType, "prefix_length": types.Int64Type}
+type AllocateHost struct {
+	Ip           types.String `tfsdk:"ip"`
+	PrefixLength types.Int64  `tfsdk:"prefix_length"`
+	Gateway      types.String `tfsdk:"gateway"`
+}
 
 func (r *ipamAllocateResource) Configure(ctx context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
@@ -126,11 +123,7 @@ func (r *ipamAllocateResource) Create(ctx context.Context, req resource.CreateRe
 
 	poolAddresses := GetAddressesFromPool(pool)
 
-	hosts := plan.Hosts.Elements()
-	addresses := plan.Addresses.Elements()
-	if addresses == nil {
-		addresses = make(map[string]attr.Value)
-	}
+	hosts := plan.Hosts
 
 	if len(hosts) > len(poolAddresses) {
 		resp.Diagnostics.AddError("Not enough IPs in pool", fmt.Sprintf("Pool '%s' does not have enough IP addresses.", plan.Pool.ValueString()))
@@ -138,21 +131,17 @@ func (r *ipamAllocateResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	index := 0
-	for h := range hosts {
-		host := hosts[h].(types.String)
+	for h, _ := range hosts {
 		ip := poolAddresses[index].IP
 		prefixLength := poolAddresses[index].PrefixLength
 		gateway := poolAddresses[index].Gateway
-		v := map[string]attr.Value{"gateway": gateway, "ip": ip, "prefix_length": prefixLength}
-		o := types.ObjectValueMust(AddressType, v)
-		addresses[host.ValueString()] = o
-		tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", host, ip.ValueString()))
+		hosts[h] = AllocateHost{Ip: ip, PrefixLength: prefixLength, Gateway: gateway}
+		tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", h, ip.ValueString()))
 		index += 1
 	}
 
 	state.Pool = plan.Pool
-	state.Hosts = plan.Hosts
-	state.Addresses = types.MapValueMust(plan.Addresses.ElementType(ctx), addresses)
+	state.Hosts = hosts
 
 	rand.Seed(time.Now().UnixNano())
 	state.Id = types.StringValue(fmt.Sprint(rand.Int63()))
@@ -207,31 +196,24 @@ func (r *ipamAllocateResource) Update(ctx context.Context, req resource.UpdateRe
 
 	poolAddresses := GetAddressesFromPool(pool)
 
-	hosts := plan.Hosts.Elements()
-	addresses := plan.Addresses.Elements()
-	if addresses == nil {
-		addresses = make(map[string]attr.Value)
-	}
+	hosts := plan.Hosts
 
 	if len(hosts) > len(poolAddresses) {
 		resp.Diagnostics.AddError("Not enough IPs in pool", fmt.Sprintf("Pool '%s' does not have enough IP addresses.", plan.Pool.ValueString()))
 		return
 	}
 
-	for h := range hosts {
-		host := hosts[h].(types.String)
+	for h, a := range hosts {
 		// check if an address is already assigned
-		found := false
-		var inUseAddresses []string
-		for h, a := range addresses {
-			address := a.(types.Object)
-			if h == host.ValueString() {
-				found = true
-			}
-			inUseAddresses = append(inUseAddresses, address.Attributes()["ip"].(types.String).ValueString())
-		}
-		if found {
+		if a.Ip.ValueString() != "" {
 			continue
+		}
+		// get list of assigned addresses
+		var inUseAddresses []string
+		for _, a := range hosts {
+			if a.Ip.ValueString() != "" {
+				inUseAddresses = append(inUseAddresses, a.Ip.ValueString())
+			}
 		}
 		// find next free IP
 		for pa := range poolAddresses {
@@ -248,18 +230,15 @@ func (r *ipamAllocateResource) Update(ctx context.Context, req resource.UpdateRe
 			ip := poolAddresses[pa].IP
 			prefixLength := poolAddresses[pa].PrefixLength
 			gateway := poolAddresses[pa].Gateway
-			v := map[string]attr.Value{"gateway": gateway, "ip": ip, "prefix_length": prefixLength}
-			o := types.ObjectValueMust(AddressType, v)
-			addresses[host.ValueString()] = o
-			tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", host, ip.ValueString()))
+			hosts[h] = AllocateHost{Ip: ip, PrefixLength: prefixLength, Gateway: gateway}
+			tflog.Debug(ctx, fmt.Sprintf("Allocate IP to %s: %v", h, ip.ValueString()))
 			break
 		}
 	}
 
 	state.Id = types.StringValue(plan.Id.ValueString())
 	state.Pool = plan.Pool
-	state.Hosts = plan.Hosts
-	state.Addresses = types.MapValueMust(plan.Addresses.ElementType(ctx), addresses)
+	state.Hosts = hosts
 
 	tflog.Debug(ctx, fmt.Sprintf("Update finished successfully"))
 
