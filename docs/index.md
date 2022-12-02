@@ -3,33 +3,37 @@
 layout: ""
 page_title: "Provider: IPAM"
 description: |-
-  The IPAM provider manages a list of IP addresses and can assign IP addresses to unique IDs (e.g., hostnames).
+  The IPAM provider manages pools of IP addresses and can allocate IP addresses to hosts.
 ---
 
 # IPAM Provider
 
-The IPAM provider manages a list of IP addresses and can assign IP addresses to unique IDs (e.g., hostnames).
+The IPAM provider manages pools of IP addresses and can allocate IP addresses to hosts.
 
 ## Example Usage
 
 ```terraform
 provider "ipam" {
-  addresses = [
+  pools = [
     {
-      ip            = "1.1.1.1"
-      prefix_length = "24"
+      name          = "POOL1"
+      prefix_length = 24
       gateway       = "1.1.1.254"
-    },
-    {
-      ip            = "1.1.1.2"
-      prefix_length = "24"
-      gateway       = "1.1.1.254"
-    },
-    {
-      ip            = "1.1.1.3"
-      prefix_length = "24"
-      gateway       = "1.1.1.254"
-    },
+      ranges = [
+        {
+          from_ip = "1.1.1.1"
+          to_ip   = "1.1.1.10"
+        }
+      ]
+      addresses = [
+        {
+          ip = "1.1.1.20"
+        },
+        {
+          ip = "1.1.1.30"
+        },
+      ]
+    }
   ]
 }
 ```
@@ -39,13 +43,44 @@ provider "ipam" {
 
 ### Required
 
-- `addresses` (Attributes List) A list of managed addresses. (see [below for nested schema](#nestedatt--addresses))
+- `pools` (Attributes List) A list of managed IP pools. (see [below for nested schema](#nestedatt--pools))
 
-<a id="nestedatt--addresses"></a>
-### Nested Schema for `addresses`
+<a id="nestedatt--pools"></a>
+### Nested Schema for `pools`
 
 Required:
 
-- `gateway` (String) Gateway IP.
+- `name` (String) IP pool name.
+
+Optional:
+
+- `addresses` (Attributes List) A list of IP addresses. (see [below for nested schema](#nestedatt--pools--addresses))
+- `gateway` (String) Default gateway IP.
+- `prefix_length` (Number) Default prefix length.
+- `ranges` (Attributes List) A list of IP ranges. (see [below for nested schema](#nestedatt--pools--ranges))
+
+<a id="nestedatt--pools--addresses"></a>
+### Nested Schema for `pools.addresses`
+
+Required:
+
 - `ip` (String) IP address.
-- `prefix_length` (String) Prefix length.
+
+Optional:
+
+- `gateway` (String) Gateway IP.
+- `prefix_length` (Number) Prefix length.
+
+
+<a id="nestedatt--pools--ranges"></a>
+### Nested Schema for `pools.ranges`
+
+Required:
+
+- `from_ip` (String) First IP.
+- `to_ip` (String) Last IP.
+
+Optional:
+
+- `gateway` (String) Gateway IP.
+- `prefix_length` (Number) Prefix length.
