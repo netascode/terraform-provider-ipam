@@ -6,9 +6,11 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -27,54 +29,51 @@ func (r *ipamAllocateResource) Metadata(_ context.Context, req resource.Metadata
 	resp.TypeName = req.ProviderTypeName + "_allocate"
 }
 
-func (r *ipamAllocateResource) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	return tfsdk.Schema{
+func (r *ipamAllocateResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Allocate one IP from a pool per unique host ID. A single resource must be used per pool.",
 
-		Attributes: map[string]tfsdk.Attribute{
-			"id": {
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
 				Description: "Random internal ID.",
-				Type:        types.StringType,
 				Computed:    true,
 			},
-			"pool": {
+			"pool": schema.StringAttribute{
 				Description: "Pool name.",
-				Type:        types.StringType,
 				Required:    true,
 			},
-			"hosts": {
+			"hosts": schema.MapNestedAttribute{
 				Description: "A map of host IDs and its assigned addresses.",
 				Required:    true,
-				Attributes: tfsdk.MapNestedAttributes(map[string]tfsdk.Attribute{
-					"ip": {
-						MarkdownDescription: "IP address.",
-						Type:                types.StringType,
-						Computed:            true,
-						PlanModifiers: tfsdk.AttributePlanModifiers{
-							resource.UseStateForUnknown(),
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"ip": schema.StringAttribute{
+							MarkdownDescription: "IP address.",
+							Computed:            true,
+							PlanModifiers: []planmodifier.String{
+								stringplanmodifier.UseStateForUnknown(),
+							},
+						},
+						"prefix_length": schema.Int64Attribute{
+							MarkdownDescription: "Prefix length.",
+							Computed:            true,
+							PlanModifiers: []planmodifier.Int64{
+								int64planmodifier.UseStateForUnknown(),
+							},
+						},
+						"gateway": schema.StringAttribute{
+							MarkdownDescription: "Gateway IP.",
+							Computed:            true,
+							PlanModifiers: []planmodifier.String{
+								stringplanmodifier.UseStateForUnknown(),
+							},
 						},
 					},
-					"prefix_length": {
-						MarkdownDescription: "Prefix length.",
-						Type:                types.Int64Type,
-						Computed:            true,
-						PlanModifiers: tfsdk.AttributePlanModifiers{
-							resource.UseStateForUnknown(),
-						},
-					},
-					"gateway": {
-						MarkdownDescription: "Gateway IP.",
-						Type:                types.StringType,
-						Computed:            true,
-						PlanModifiers: tfsdk.AttributePlanModifiers{
-							resource.UseStateForUnknown(),
-						},
-					},
-				}),
+				},
 			},
 		},
-	}, nil
+	}
 }
 
 type Allocate struct {
