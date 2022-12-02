@@ -1,4 +1,4 @@
-## 0.1.0 (unreleased)
+## 0.1.0
 
 - BREAKING CHANGE: Add support for multiple pools
 - Add support for IP ranges
