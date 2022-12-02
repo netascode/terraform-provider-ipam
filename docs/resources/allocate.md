@@ -47,7 +47,7 @@ hosts = tomap({
 ### Required
 
 - `hosts` (Attributes Map) A map of host IDs and its assigned addresses. (see [below for nested schema](#nestedatt--hosts))
-- `pool` (String) Pool name.
+- `pool` (String) Pool name. Must reference a pool from the provider configuration.
 
 ### Read-Only
 

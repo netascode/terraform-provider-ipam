@@ -3,12 +3,12 @@
 layout: ""
 page_title: "Provider: IPAM"
 description: |-
-  The IPAM provider manages a list of IP addresses and can assign IP addresses to unique IDs (e.g., hostnames).
+  The IPAM provider manages pools of IP addresses and can allocate IP addresses to hosts.
 ---
 
 # IPAM Provider
 
-The IPAM provider manages a list of IP addresses and can assign IP addresses to unique IDs (e.g., hostnames).
+The IPAM provider manages pools of IP addresses and can allocate IP addresses to hosts.
 
 ## Example Usage
 

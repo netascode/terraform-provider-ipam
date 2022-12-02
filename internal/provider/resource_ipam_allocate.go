@@ -40,7 +40,7 @@ func (r *ipamAllocateResource) Schema(ctx context.Context, req resource.SchemaRe
 				Computed:    true,
 			},
 			"pool": schema.StringAttribute{
-				Description: "Pool name.",
+				Description: "Pool name. Must reference a pool from the provider configuration.",
 				Required:    true,
 			},
 			"hosts": schema.MapNestedAttribute{
